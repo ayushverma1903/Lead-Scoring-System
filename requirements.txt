@@ -1,0 +1,10 @@
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
+shap
+jupyter
+fastapi
+uvicorn
+python-dotenv
