@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: lead-scoring-api
+    env: docker
+    dockerfilePath: Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    branch: main
+    autoDeploy: true
+    envVars:
+      - key: MODEL_PATH
+        value: models/lead_scoring_model.pkl
+      - key: SCALER_PATH
+        value: models/scaler.pkl
+      - key: FEATURES_PATH
+        value: models/feature_columns.pkl
+        
+  - type: web
+    name: lead-scoring-frontend
+    env: docker
+    dockerfilePath: Dockerfile
+    dockerContext: .
+    branch: main
+    autoDeploy: true
+    startCommand: streamlit run app.py --server.port 8501 --server.address 0.0.0.0
+    envVars:
+      - key: API_URL
+        value: http://lead-scoring-api:8000
