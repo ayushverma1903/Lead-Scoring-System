@@ -1,6 +1,6 @@
 pandas
 numpy
-scikit-learn
+scikit-learn<1.6
 matplotlib
 seaborn
 shap
@@ -8,3 +8,5 @@ jupyter
 fastapi
 uvicorn
 python-dotenv
+streamlit
+requests
