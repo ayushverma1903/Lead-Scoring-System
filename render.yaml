@@ -2,6 +2,7 @@ services:
   - type: web
     name: lead-scoring-api
     env: docker
+    plan: free
     dockerfilePath: Dockerfile
     dockerContext: .
     healthCheckPath: /health
@@ -18,6 +19,7 @@ services:
   - type: web
     name: lead-scoring-frontend
     env: docker
+    plan: free
     dockerfilePath: frontend/Dockerfile
     dockerContext: .
     branch: main
