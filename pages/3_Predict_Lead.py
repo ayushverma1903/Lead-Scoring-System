@@ -67,24 +67,46 @@ with tab2:
         if st.button("Score Leads"):
             with st.spinner("Scoring leads..."):
                 try:
-                    # Use pandas to_json which natively converts NaN → null
-                    leads_list = json.loads(df.to_json(orient="records"))
-                    response = requests.post(f"{API_URL}/batch_predict", json={"leads": leads_list})
+                    import math
                     
-                    if response.status_code == 200:
-                        results = response.json()
-                        results_df = pd.DataFrame(results)
+                    batch_size = 500
+                    num_batches = math.ceil(len(df) / batch_size)
+                    results_list = []
+                    
+                    progress_text = "Scoring leads..."
+                    progress_bar = st.progress(0, text=progress_text)
+                    
+                    success = True
+                    for i in range(num_batches):
+                        chunk = df.iloc[i * batch_size : (i + 1) * batch_size]
+                        # Use pandas to_json which natively converts NaN → null
+                        leads_list = json.loads(chunk.to_json(orient="records"))
+                        
+                        try:
+                            response = requests.post(f"{API_URL}/batch_predict", json={"leads": leads_list}, timeout=30)
+                            if response.status_code == 200:
+                                results_list.extend(response.json())
+                            else:
+                                st.error(f"Error in batch {i + 1}: {response.text}")
+                                success = False
+                                break
+                        except requests.exceptions.RequestException as e:
+                            st.error(f"Failed to connect to API on batch {i + 1}: {str(e)}")
+                            success = False
+                            break
+                            
+                        # Update progress bar
+                        progress_bar.progress((i + 1) / num_batches, text=f"Scored {min((i+1)*batch_size, len(df))} of {len(df)} leads...")
+                        
+                    if success and len(results_list) > 0:
+                        results_df = pd.DataFrame(results_list)
                         st.success("Batch Prediction Successful!")
-                        st.dataframe(results_df)
+                        st.dataframe(results_df.head(50)) # preview first 50
                         
                         csv = results_df.to_csv(index=False).encode('utf-8')
                         st.download_button(
-                            label="Download Results as CSV",
+                            label="Download All Results as CSV",
                             data=csv,
                             file_name='scored_leads.csv',
                             mime='text/csv',
                         )
-                    else:
-                        st.error(f"Error: {response.text}")
-                except Exception as e:
-                    st.error(f"Failed to connect to API: {str(e)}")

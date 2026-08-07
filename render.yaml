@@ -9,6 +9,8 @@ services:
     branch: main
     autoDeploy: true
     envVars:
+      - key: PORT
+        value: 8000
       - key: MODEL_PATH
         value: models/lead_scoring_model.pkl
       - key: SCALER_PATH
@@ -25,5 +27,7 @@ services:
     branch: main
     autoDeploy: true
     envVars:
+      - key: PORT
+        value: 8501
       - key: API_URL
         value: http://lead-scoring-api:8000

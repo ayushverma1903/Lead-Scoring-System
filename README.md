@@ -5,7 +5,7 @@ An end-to-end Machine Learning pipeline that predicts the likelihood of a lead c
 ---
 
 ## 📖 Business Problem
-The company generates a large number of leads (professionals looking for courses) through various channels. However, the current lead conversion rate is low (around 30%). To improve this, the sales team needs to focus their efforts on leads most likely to convert ("Hot Leads"). This system provides a Lead Score (0 to 100) for every lead to prioritize calling efforts and achieve a target lead conversion rate of ~80%.
+The company generates a large number of leads (professionals looking for courses) through various channels. However, the current lead conversion rate is low (around 30%). To improve this, the sales team needs to focus their efforts on leads most likely to convert ("Hot Leads"). This system provides a Lead severy lead to prioritize calling efforts and achieve a target lead conversion rate of ~80%.
 
 ## 🏗️ Architecture
 - **Data Engineering:** Pandas, Scikit-Learn (Preprocessing Pipelines)

@@ -13,4 +13,4 @@ EXPOSE 8000
 EXPOSE 8501
 
 # The default command can be anything, docker-compose will override it
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD sh -c "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}"
