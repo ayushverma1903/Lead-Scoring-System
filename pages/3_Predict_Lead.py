@@ -1,8 +1,11 @@
 import streamlit as st
 import pandas as pd
-import requests
-import json
+import sys
 import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from src.predict import LeadScorer
 
 st.set_page_config(page_title="Predict Lead", page_icon="🔮", layout="wide")
 
@@ -12,8 +15,38 @@ st.markdown("Use this page to score leads. You can either score a single lead ma
 
 tab1, tab2 = st.tabs(["Single Prediction", "Batch Prediction"])
 
-API_URL = os.getenv("API_URL", "http://localhost:8000")
+MODEL_PATH = "models/lead_scoring_model.pkl"
+SCALER_PATH = "models/scaler.pkl"
+FEATURES_PATH = "models/feature_columns.pkl"
 
+
+@st.cache_resource(show_spinner="Loading model…")
+def load_scorer():
+    """Load the model once and cache it across reruns."""
+    return LeadScorer(MODEL_PATH, SCALER_PATH, FEATURES_PATH)
+
+
+# ── Check that model files exist ──────────────────────────────────────────────
+if not all(os.path.exists(p) for p in [MODEL_PATH, SCALER_PATH, FEATURES_PATH]):
+    st.error(
+        "❌ Model files not found. Please ensure these files exist:\n"
+        f"- `{MODEL_PATH}`\n"
+        f"- `{SCALER_PATH}`\n"
+        f"- `{FEATURES_PATH}`\n\n"
+        "Run the training notebooks first to generate them."
+    )
+    st.stop()
+
+try:
+    scorer = load_scorer()
+except Exception as e:
+    st.error(f"❌ Failed to load model: {e}")
+    st.stop()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 1: Single Prediction
+# ══════════════════════════════════════════════════════════════════════════════
 with tab1:
     st.subheader("Single Lead Prediction")
     
@@ -31,29 +64,40 @@ with tab1:
         submit = st.form_submit_button("Predict")
         
         if submit:
-            data = {
+            raw_lead = pd.DataFrame([{
                 "TotalVisits": total_visits,
                 "Total Time Spent on Website": time_spent,
                 "Page Views Per Visit": page_views,
                 "Lead Origin": lead_origin,
                 "Lead Source": lead_source,
                 "Do Not Email": do_not_email
-            }
+            }])
             try:
-                response = requests.post(f"{API_URL}/predict", json={"data": data})
-                if response.status_code == 200:
-                    result = response.json()
-                    st.success("Prediction Successful!")
-                    
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("Conversion Probability", f"{result['Conversion_Probability']}%")
-                    c2.metric("Prediction", result['Prediction'])
-                    c3.metric("Priority", result['Priority'])
+                report = scorer.score_raw_leads(raw_lead)
+                result = report.iloc[0]
+                
+                st.success("Prediction Successful!")
+                
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Conversion Probability", f"{result['Conversion_Probability']}%")
+                c2.metric("Prediction", result['Prediction'])
+                c3.metric("Priority", result['Priority'])
+                
+                # Visual indicator
+                priority = result['Priority']
+                if priority == "Hot":
+                    st.success(f"🔥 **Hot Lead** — {result['Conversion_Probability']}% chance of conversion")
+                elif priority == "Warm":
+                    st.warning(f"🌡️ **Warm Lead** — {result['Conversion_Probability']}% chance of conversion")
                 else:
-                    st.error(f"Error: {response.text}")
+                    st.info(f"❄️ **Cold Lead** — {result['Conversion_Probability']}% chance of conversion")
             except Exception as e:
-                st.error(f"Failed to connect to API: {str(e)}")
+                st.error(f"Prediction failed: {str(e)}")
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 2: Batch Prediction
+# ══════════════════════════════════════════════════════════════════════════════
 with tab2:
     st.subheader("Batch Lead Prediction")
 
@@ -119,31 +163,20 @@ with tab2:
 
                     progress_bar = st.progress(0, text="Scoring leads...")
 
-                    success = True
                     for i in range(num_batches):
                         chunk = df.iloc[i * batch_size : (i + 1) * batch_size]
-                        leads_list = json.loads(chunk.to_json(orient="records"))
 
-                        try:
-                            response = requests.post(f"{API_URL}/batch_predict", json={"leads": leads_list}, timeout=60)
-                            if response.status_code == 200:
-                                results_list.extend(response.json())
-                            else:
-                                st.error(f"Error in batch {i + 1}: {response.text}")
-                                success = False
-                                break
-                        except requests.exceptions.RequestException as e:
-                            st.error(f"Failed to connect to API on batch {i + 1}: {str(e)}")
-                            success = False
-                            break
+                        # Score the chunk directly using the model
+                        chunk_report = scorer.score_raw_leads(chunk)
+                        results_list.append(chunk_report)
 
                         progress_bar.progress(
                             (i + 1) / num_batches,
                             text=f"Scored {min((i+1)*batch_size, len(df)):,} of {len(df):,} leads..."
                         )
 
-                    if success and len(results_list) > 0:
-                        results_df = pd.DataFrame(results_list)
+                    if results_list:
+                        results_df = pd.concat(results_list, ignore_index=True)
                         st.success(f"🎯 Batch Prediction Successful! Scored {len(results_df):,} leads.")
 
                         # Summary stats
@@ -162,5 +195,4 @@ with tab2:
                             mime="text/csv",
                         )
                 except Exception as e:
-                    st.error(f"Failed to connect to API: {str(e)}")
-
+                    st.error(f"Scoring failed: {str(e)}")

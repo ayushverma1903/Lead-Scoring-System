@@ -66,10 +66,14 @@ def clean_raw_lead_data(df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].fillna('Unknown')
 
-    # Impute remaining numeric columns with median
+    # Impute remaining numeric columns with median (handle single-row where median == the value itself)
     for col in ['TotalVisits', 'Page Views Per Visit']:
         if col in df.columns:
-            df[col] = df[col].fillna(df[col].median())
+            col_median = df[col].median()
+            # If median is NaN (all values are NaN), default to 0
+            if pd.isna(col_median):
+                col_median = 0
+            df[col] = df[col].fillna(col_median)
 
     # Impute any remaining categorical columns with mode
     for col in df.select_dtypes(include='object').columns:
@@ -77,6 +81,13 @@ def clean_raw_lead_data(df: pd.DataFrame) -> pd.DataFrame:
             mode_val = df[col].mode()
             if len(mode_val) > 0:
                 df[col] = df[col].fillna(mode_val[0])
+            else:
+                # If mode is empty (all NaN), fill with "Unknown"
+                df[col] = df[col].fillna('Unknown')
+
+    # Final safety: fill any remaining NaN in numeric columns with 0
+    for col in df.select_dtypes(include='number').columns:
+        df[col] = df[col].fillna(0)
 
     return df
 
@@ -89,6 +100,8 @@ def engineer_features(df: pd.DataFrame, rare_category_threshold: float = 0.01) -
     for col in BINARY_COLS:
         if col in df.columns:
             df[col] = df[col].map({'Yes': 1, 'No': 0})
+            # Fill any unmapped values (e.g. NaN after map) with 0
+            df[col] = df[col].fillna(0).astype(int)
 
     # Group rare categories into "Other" for high-cardinality columns
     for col in HIGH_CARDINALITY_COLS:
@@ -120,7 +133,10 @@ def align_to_model_features(df: pd.DataFrame, feature_columns: list) -> pd.DataF
     was trained on (top 30 features), in the same order.
     Missing columns are filled with 0; extra columns are dropped.
     """
-    return df.reindex(columns=feature_columns, fill_value=0)
+    aligned = df.reindex(columns=feature_columns, fill_value=0)
+    # Final safety net: replace any remaining NaN/Inf with 0
+    aligned = aligned.replace([np.inf, -np.inf], 0).fillna(0)
+    return aligned
 
 
 def full_preprocess_pipeline(raw_df: pd.DataFrame, feature_columns: list) -> pd.DataFrame:

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 import pandas as pd
 from src.logger import get_logger
-import subprocess
+import sys
 import os
 
 router = APIRouter()
@@ -40,9 +40,9 @@ def get_metrics():
 def run_retraining():
     logger.info("Starting automated retraining task...")
     try:
-        # We will create src/retrain.py later
-        subprocess.run(["python", "src/retrain.py"], check=True)
-        logger.info("Automated retraining task completed successfully.")
+        from src.retrain import retrain
+        result = retrain()
+        logger.info(f"Retraining result: {result.get('status')} — {result.get('message')}")
     except Exception as e:
         logger.error(f"Retraining failed: {str(e)}")
 

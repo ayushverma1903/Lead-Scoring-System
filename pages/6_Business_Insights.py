@@ -1,16 +1,17 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import requests, os
+import os, sys
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 st.set_page_config(page_title="Business Insights", page_icon="💼", layout="wide")
 st.title("💼 Business Insights & Operations")
 st.markdown("Real KPIs computed from the loaded dataset, plus pipeline controls.")
 
-API_URL = os.getenv("API_URL", "http://localhost:8000")
 DEFAULT_DATA_PATH = "data/raw/Lead Scoring.csv"
 
 if "user_df" not in st.session_state:
@@ -158,11 +159,28 @@ st.markdown(
     "The new model will replace the current one only if it outperforms it."
 )
 if st.button("🚀 Trigger Retraining Pipeline"):
-    try:
-        resp = requests.post(f"{API_URL}/retrain", timeout=10)
-        if resp.status_code == 200:
-            st.success("✅ Retraining task started in the background. Check API logs for progress.")
-        else:
-            st.error(f"Failed: {resp.text}")
-    except Exception as e:
-        st.error(f"Could not reach API: {e}")
+    with st.spinner("Running retraining pipeline... This may take a moment."):
+        try:
+            from src.retrain import retrain
+            result = retrain()
+            
+            status = result.get("status", "error")
+            message = result.get("message", "Unknown result")
+            
+            if status == "success":
+                st.success(f"✅ {message}")
+                metrics = result.get("metrics", {})
+                if metrics:
+                    mc1, mc2 = st.columns(2)
+                    mc1.metric("New Model Accuracy", f"{metrics.get('accuracy', 0)*100:.1f}%")
+                    mc2.metric("New Model AUC", f"{metrics.get('auc', 0):.4f}")
+                st.info("🔄 Restart the app to use the new model for predictions.")
+            elif status == "no_data":
+                st.warning(f"⚠️ {message}")
+            elif status == "not_improved":
+                st.info(f"ℹ️ {message}")
+            else:
+                st.error(f"❌ {message}")
+                
+        except Exception as e:
+            st.error(f"❌ Retraining failed: {str(e)}")

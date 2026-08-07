@@ -11,6 +11,12 @@ services:
       - .:/app
     environment:
       - PYTHONPATH=/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   frontend:
     build: .
@@ -21,6 +27,6 @@ services:
     volumes:
       - .:/app
     environment:
-      - API_URL=http://api:8000
+      - PYTHONPATH=/app
     depends_on:
       - api

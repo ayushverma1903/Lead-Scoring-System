@@ -29,5 +29,3 @@ services:
     envVars:
       - key: PORT
         value: 8501
-      - key: API_URL
-        value: http://lead-scoring-api:8000

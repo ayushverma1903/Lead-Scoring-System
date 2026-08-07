@@ -23,15 +23,26 @@ Usage:
 import numpy as np
 import pandas as pd
 import joblib
+import os
 
 from .preprocess import full_preprocess_pipeline
 
 
 class LeadScorer:
     def __init__(self, model_path: str, scaler_path: str, features_path: str):
-        self.model = joblib.load(model_path)
-        self.scaler = joblib.load(scaler_path)
-        self.feature_columns = joblib.load(features_path)
+        # Validate paths before loading
+        for path, name in [(model_path, "Model"), (scaler_path, "Scaler"), (features_path, "Features")]:
+            if not os.path.exists(path):
+                raise FileNotFoundError(
+                    f"{name} file not found at '{path}'. "
+                    "Please run the training notebooks first or check your model paths."
+                )
+        try:
+            self.model = joblib.load(model_path)
+            self.scaler = joblib.load(scaler_path)
+            self.feature_columns = joblib.load(features_path)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load model artifacts: {e}")
 
     def predict(self, leads_df: pd.DataFrame):
         """
@@ -40,6 +51,10 @@ class LeadScorer:
         Returns (probabilities, predictions).
         """
         aligned = leads_df.reindex(columns=self.feature_columns, fill_value=0)
+
+        # Safety: replace any NaN/Inf that survived preprocessing
+        aligned = aligned.replace([np.inf, -np.inf], 0).fillna(0)
+
         scaled = self.scaler.transform(aligned)
 
         probabilities = self.model.predict_proba(scaled)[:, 1]
