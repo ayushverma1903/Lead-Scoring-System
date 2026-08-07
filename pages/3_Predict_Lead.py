@@ -69,7 +69,7 @@ with tab2:
                 try:
                     import math
                     
-                    batch_size = 500
+                    batch_size = 2500
                     num_batches = math.ceil(len(df) / batch_size)
                     results_list = []
                     
@@ -110,3 +110,5 @@ with tab2:
                             file_name='scored_leads.csv',
                             mime='text/csv',
                         )
+                except Exception as e:
+                    st.error(f"Failed to connect to API: {str(e)}")
