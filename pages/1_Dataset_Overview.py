@@ -1,26 +1,30 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import os
+
+st.set_page_config(page_title="Dataset Overview", page_icon="📊", layout="wide")
+st.title("📊 Dataset Overview")
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Dataset Overview", page_icon="📊", layout="wide")
-st.title("📊 Dataset Overview")
-st.markdown("A complete summary of the raw dataset used to train the Lead Scoring model.")
+# ── Load data from session_state ──────────────────────────────────────────────
+DEFAULT_DATA_PATH = "data/raw/Lead Scoring.csv"
 
-DATA_PATH = "data/raw/Lead Scoring.csv"
+if "user_df" not in st.session_state:
+    if os.path.exists(DEFAULT_DATA_PATH):
+        st.session_state["user_df"] = pd.read_csv(DEFAULT_DATA_PATH)
+        st.session_state["data_source"] = "📁 Default: Lead Scoring.csv"
 
-if not os.path.exists(DATA_PATH):
-    st.warning("Raw dataset not found at `data/raw/Lead Scoring.csv`.")
+if "user_df" not in st.session_state:
+    st.warning("No dataset loaded. Please go to the **Home** page and upload a dataset.")
     st.stop()
 
-@st.cache_data(show_spinner="Loading dataset…")
-def load_data():
-    return pd.read_csv(DATA_PATH)
-
-df = load_data()
+df = st.session_state["user_df"]
+source = st.session_state.get("data_source", "")
+st.caption(f"**Data source:** {source} — {df.shape[0]:,} rows × {df.shape[1]} columns")
+st.markdown("A complete summary of the loaded lead scoring dataset.")
 
 # ── Top KPI strip ──────────────────────────────────────────────────────────────
 total       = len(df)
@@ -30,11 +34,11 @@ n_features  = df.shape[1]
 missing_pct = df.isnull().mean().mean() * 100
 
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Total Leads",        f"{total:,}")
-c2.metric("Converted Leads",    f"{converted:,}")
-c3.metric("Conversion Rate",    f"{conv_rate:.1f}%")
-c4.metric("Total Features",     f"{n_features}")
-c5.metric("Overall Missing %",  f"{missing_pct:.1f}%")
+c1.metric("Total Leads",       f"{total:,}")
+c2.metric("Converted Leads",   f"{converted:,}" if "Converted" in df.columns else "N/A")
+c3.metric("Conversion Rate",   f"{conv_rate:.1f}%" if "Converted" in df.columns else "N/A")
+c4.metric("Total Features",    f"{n_features}")
+c5.metric("Overall Missing %", f"{missing_pct:.1f}%")
 
 st.divider()
 
@@ -77,6 +81,8 @@ with right:
         plt.tight_layout()
         st.pyplot(fig)
         plt.close(fig)
+    else:
+        st.info("'Lead Source' or 'Converted' column not found in dataset.")
 
 st.divider()
 

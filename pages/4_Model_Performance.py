@@ -15,33 +15,52 @@ from sklearn.metrics import (
 
 st.set_page_config(page_title="Model Performance", page_icon="📊", layout="wide")
 st.title("📊 Model Performance Metrics")
-st.markdown("Live evaluation of the production model on the training dataset.")
 
 MODEL_PATH    = "models/lead_scoring_model.pkl"
 SCALER_PATH   = "models/scaler.pkl"
 FEATURES_PATH = "models/feature_columns.pkl"
-DATA_PATH     = "data/raw/Lead Scoring.csv"
+DEFAULT_DATA_PATH = "data/raw/Lead Scoring.csv"
 METRICS_PATH  = "outputs/metrics.json"
 
-missing = not all(os.path.exists(p) for p in [MODEL_PATH, SCALER_PATH, FEATURES_PATH, DATA_PATH])
-if missing:
-    st.warning("Model or data files missing. Run the training notebooks first.")
+# ── Load data from session_state ──────────────────────────────────────────────
+if "user_df" not in st.session_state:
+    if os.path.exists(DEFAULT_DATA_PATH):
+        st.session_state["user_df"] = pd.read_csv(DEFAULT_DATA_PATH)
+        st.session_state["data_source"] = "📁 Default: Lead Scoring.csv"
+
+if "user_df" not in st.session_state:
+    st.warning("No dataset loaded. Please go to the **Home** page and upload a dataset.")
     st.stop()
 
+if not all(os.path.exists(p) for p in [MODEL_PATH, SCALER_PATH, FEATURES_PATH]):
+    st.warning("Model files missing. Run the training notebooks first.")
+    st.stop()
+
+df = st.session_state["user_df"]
+source = st.session_state.get("data_source", "")
+st.caption(f"**Data source:** {source} — evaluating model on {df.shape[0]:,} leads")
+
+if "Converted" not in df.columns:
+    st.error("❌ Column 'Converted' not found. Model Performance requires a 'Converted' column (0/1) to compute metrics.")
+    st.stop()
+
+st.markdown("Live evaluation of the production model on the loaded dataset.")
+
 @st.cache_resource(show_spinner="Loading model & evaluating…")
-def load_and_evaluate():
+def load_model():
     model    = joblib.load(MODEL_PATH)
     scaler   = joblib.load(SCALER_PATH)
     features = joblib.load(FEATURES_PATH)
+    return model, scaler, features
 
-    raw_df  = pd.read_csv(DATA_PATH)
-    y       = raw_df["Converted"].values
-    X_raw   = raw_df.drop(columns=["Converted"], errors="ignore")
-    X       = full_preprocess_pipeline(X_raw, features)
-    X_sc    = scaler.transform(X)
+def evaluate(model, scaler, features, raw_df):
+    y     = raw_df["Converted"].values
+    X_raw = raw_df.drop(columns=["Converted"], errors="ignore")
+    X     = full_preprocess_pipeline(X_raw, features)
+    X_sc  = scaler.transform(X)
 
-    y_pred  = model.predict(X_sc)
-    y_prob  = model.predict_proba(X_sc)[:, 1]
+    y_pred = model.predict(X_sc)
+    y_prob = model.predict_proba(X_sc)[:, 1]
 
     metrics = {
         "accuracy":  round(accuracy_score(y, y_pred),  4),
@@ -50,17 +69,23 @@ def load_and_evaluate():
         "f1_score":  round(f1_score(y, y_pred),        4),
         "roc_auc":   round(roc_auc_score(y, y_prob),   4),
     }
+    fpr, tpr, _ = roc_curve(y, y_prob)
+    cm = confusion_matrix(y, y_pred)
+    return metrics, fpr, tpr, cm, y_prob
 
-    # Persist so API /metrics endpoint picks it up
+try:
+    model, scaler, features = load_model()
+    with st.spinner("Evaluating model on current dataset…"):
+        metrics, fpr, tpr, cm, y_prob = evaluate(model, scaler, features, df)
+
+    # Save metrics for API endpoint
     os.makedirs("outputs", exist_ok=True)
     with open(METRICS_PATH, "w") as f:
         json.dump(metrics, f)
 
-    fpr, tpr, _ = roc_curve(y, y_prob)
-    cm          = confusion_matrix(y, y_pred)
-    return metrics, fpr, tpr, cm, y_prob
-
-metrics, fpr, tpr, cm, y_prob = load_and_evaluate()
+except Exception as e:
+    st.error(f"Evaluation failed: {e}")
+    st.stop()
 
 # ── KPI strip ──────────────────────────────────────────────────────────────────
 st.subheader("Key Metrics")
@@ -124,4 +149,4 @@ plt.tight_layout()
 st.pyplot(fig3)
 plt.close(fig3)
 
-st.info("Metrics are computed live against the full dataset each time this page loads. They are also saved to `outputs/metrics.json` for the API `/metrics` endpoint.")
+st.info("Metrics are computed live against the currently loaded dataset. Upload a new dataset from the Home page sidebar to re-evaluate.")
